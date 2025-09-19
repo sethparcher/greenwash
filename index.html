@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greenwash Photo Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .upload-area {
+            border: 3px dashed #49F400;
+            border-radius: 15px;
+            padding: 60px 20px;
+            margin: 30px 0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: #f8fffa;
+        }
+
+        .upload-area:hover {
+            border-color: #3dd400;
+            background: #f0fff5;
+            transform: scale(1.02);
+        }
+
+        .upload-area.dragover {
+            border-color: #3dd400;
+            background: #e8ffe8;
+            transform: scale(1.05);
+        }
+
+        .upload-text {
+            color: #666;
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+
+        .upload-subtext {
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .preview-section {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .image-container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+
+        .image-box {
+            text-align: center;
+        }
+
+        .image-box h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .image-box canvas {
+            max-width: 300px;
+            max-height: 300px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .download-btn {
+            background: linear-gradient(45deg, #49F400, #3dd400);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(73, 244, 0, 0.3);
+        }
+
+        .processing {
+            display: none;
+            color: #49F400;
+            font-size: 1.1em;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #49F400;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Greenwash Photo Tool</h1>
+        <p>Transform your photos with our signature greenwash effect</p>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-text">📸 Drop your photo here or click to browse</div>
+            <div class="upload-subtext">Supports JPG, PNG, GIF, BMP, WebP</div>
+        </div>
+
+        <input type="file" id="fileInput" accept="image/*">
+
+        <div class="processing" id="processing">
+            <div class="spinner"></div>
+            Processing your image...
+        </div>
+
+        <div class="preview-section" id="previewSection">
+            <div class="image-container">
+                <div class="image-box">
+                    <h3>Original</h3>
+                    <canvas id="originalCanvas"></canvas>
+                </div>
+                <div class="image-box">
+                    <h3>Greenwashed</h3>
+                    <canvas id="processedCanvas"></canvas>
+                </div>
+            </div>
+            <button class="download-btn" id="downloadBtn">📥 Download Greenwashed Image</button>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const previewSection = document.getElementById('previewSection');
+        const processing = document.getElementById('processing');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const processedCanvas = document.getElementById('processedCanvas');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
+        uploadArea.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileSelect);
+        downloadBtn.addEventListener('click', downloadImage);
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                processFile(file);
+            }
+        }
+
+
+        function displayOriginal(img) {
+            const ctx = originalCanvas.getContext('2d');
+            const maxSize = 300;
+            const scale = Math.min(maxSize / img.width, maxSize / img.height);
+
+            originalCanvas.width = img.width * scale;
+            originalCanvas.height = img.height * scale;
+
+            ctx.drawImage(img, 0, 0, originalCanvas.width, originalCanvas.height);
+        }
+
+        function applyGreenwashEffect(img) {
+            const ctx = processedCanvas.getContext('2d');
+            const maxSize = 300;
+            const scale = Math.min(maxSize / img.width, maxSize / img.height);
+
+            processedCanvas.width = img.width * scale;
+            processedCanvas.height = img.height * scale;
+
+            // Step 1: Draw original image
+            ctx.drawImage(img, 0, 0, processedCanvas.width, processedCanvas.height);
+
+            // Step 2: Convert to black and white
+            const imageData = ctx.getImageData(0, 0, processedCanvas.width, processedCanvas.height);
+            const data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                data[i] = gray;     // Red
+                data[i + 1] = gray; // Green
+                data[i + 2] = gray; // Blue
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+
+            // Step 3: Apply gradient map based on luminosity
+            const gradientData = ctx.getImageData(0, 0, processedCanvas.width, processedCanvas.height);
+            const gradientPixels = gradientData.data;
+
+            // Define gradient map colors
+            const darkColor = { r: 73, g: 244, b: 0 };   // #49F400
+            const lightColor = { r: 255, g: 255, b: 255 }; // #FFFFFF
+
+            // Apply gradient map to each pixel based on its luminosity
+            for (let i = 0; i < gradientPixels.length; i += 4) {
+                const luminosity = gradientPixels[i] / 255; // Use grayscale value as luminosity (0-1)
+
+                // Interpolate between dark and light colors based on luminosity
+                const r = darkColor.r + (lightColor.r - darkColor.r) * luminosity;
+                const g = darkColor.g + (lightColor.g - darkColor.g) * luminosity;
+                const b = darkColor.b + (lightColor.b - darkColor.b) * luminosity;
+
+                gradientPixels[i] = r;     // Red
+                gradientPixels[i + 1] = g; // Green
+                gradientPixels[i + 2] = b; // Blue
+                // Alpha stays the same
+            }
+
+            // Create temporary canvas for soft light blending
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = processedCanvas.width;
+            tempCanvas.height = processedCanvas.height;
+
+            tempCtx.putImageData(gradientData, 0, 0);
+
+            // Apply soft light blending mode
+            ctx.globalCompositeOperation = 'soft-light';
+            ctx.drawImage(tempCanvas, 0, 0);
+            ctx.globalCompositeOperation = 'source-over';
+
+            processing.style.display = 'none';
+            previewSection.style.display = 'block';
+        }
+
+        let originalImageData = null; // Store original full-resolution image
+
+        function processFile(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Please select an image file');
+                return;
+            }
+
+            processing.style.display = 'block';
+            previewSection.style.display = 'none';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    originalImageData = img; // Store original image for download
+                    displayOriginal(img);
+                    setTimeout(() => applyGreenwashEffect(img), 100);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function downloadImage() {
+            if (!originalImageData) {
+                alert('No image loaded');
+                return;
+            }
+
+            // Use the original full-resolution image
+            const img = originalImageData;
+                const downloadCanvas = document.createElement('canvas');
+                const ctx = downloadCanvas.getContext('2d');
+
+                downloadCanvas.width = img.width;
+                downloadCanvas.height = img.height;
+
+                // Apply the same effect at full resolution
+                ctx.drawImage(img, 0, 0);
+
+                // Convert to black and white
+                const imageData = ctx.getImageData(0, 0, downloadCanvas.width, downloadCanvas.height);
+                const data = imageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+
+                // Apply gradient map based on luminosity
+                const gradientData = ctx.getImageData(0, 0, downloadCanvas.width, downloadCanvas.height);
+                const gradientPixels = gradientData.data;
+
+                // Define gradient map colors
+                const darkColor = { r: 73, g: 244, b: 0 };   // #49F400
+                const lightColor = { r: 255, g: 255, b: 255 }; // #FFFFFF
+
+                // Apply gradient map to each pixel based on its luminosity
+                for (let i = 0; i < gradientPixels.length; i += 4) {
+                    const luminosity = gradientPixels[i] / 255; // Use grayscale value as luminosity (0-1)
+
+                    // Interpolate between dark and light colors based on luminosity
+                    const r = darkColor.r + (lightColor.r - darkColor.r) * luminosity;
+                    const g = darkColor.g + (lightColor.g - darkColor.g) * luminosity;
+                    const b = darkColor.b + (lightColor.b - darkColor.b) * luminosity;
+
+                    gradientPixels[i] = r;     // Red
+                    gradientPixels[i + 1] = g; // Green
+                    gradientPixels[i + 2] = b; // Blue
+                    // Alpha stays the same
+                }
+
+                // Create temporary canvas for soft light blending
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = downloadCanvas.width;
+                tempCanvas.height = downloadCanvas.height;
+
+                tempCtx.putImageData(gradientData, 0, 0);
+
+                ctx.globalCompositeOperation = 'soft-light';
+                ctx.drawImage(tempCanvas, 0, 0);
+
+                // Download as PNG
+                downloadCanvas.toBlob(function(blob) {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'greenwashed-image.png';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 'image/png');
+        }
+    </script>
+</body>
+</html>
